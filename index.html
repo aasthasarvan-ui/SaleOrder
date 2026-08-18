@@ -56,7 +56,7 @@
 
         logDiv.innerText = "Status: Processing started...\n";
 
-        // Read Template File as ArrayBuffer to preserve structure
+        // Read Template File as ArrayBuffer to preserve formatting & theme
         let templateFile = filesMap['output.xlsx'];
         let templateArrayBuffer = await templateFile.arrayBuffer();
 
@@ -149,7 +149,7 @@
             }
             if (totalCol === -1) totalCol = jsonInput[fgRow].length;
 
-            // 5. Open fresh copy of template for this file to keep theme/formatting intact
+            // 5. Open fresh copy of template for this file to keep original styling/theme
             let clonedBuffer = templateArrayBuffer.slice(0);
             let templateWb = XLSX.read(clonedBuffer, {type: 'array', cellStyles: true, cellFormulas: true});
             let sheetName = templateWb.SheetNames.includes("Order Data") ? "Order Data" : templateWb.SheetNames[0];
@@ -171,7 +171,6 @@
                             rowHasItems = true;
                             let fgName = jsonInput[fgRow][c];
 
-                            // Helper function to set cell values safely in existing sheet
                             function setCell(rIndex, cIndex, val) {
                                 let cellRef = XLSX.utils.encode_cell({r: rIndex, c: cIndex});
                                 templateWs[cellRef] = templateWs[cellRef] || { t: 's' };
@@ -205,20 +204,20 @@
                 }
             }
 
-            // Update sheet range reference if rows increased
+            // Update sheet range reference
             let range = XLSX.utils.decode_range(templateWs['!ref'] || "A1:Z1");
             if (rowIdx > range.e.r) {
                 range.e.r = rowIdx;
                 templateWs['!ref'] = XLSX.utils.encode_range(range);
             }
 
-            // Trigger Browser Download
+            // Trigger Browser Download keeping original template structure
             let safeRoute = String(routeNum).replace(/[\/\\?%*:|"<>]/g, "-");
             let timeStamp = new Date().toTimeString().slice(0,8).replace(/:/g,"");
             XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`);
             
             totalProcessed++;
-            logDiv.innerText += `✅ Success: ${fileName} processed with formatting.\n`;
+            logDiv.innerText += `✅ Success: ${fileName} processed with original template theme.\n`;
         }
 
         logDiv.innerText += `\n🎉 All Done! Total ${totalProcessed} files processed & downloaded.`;

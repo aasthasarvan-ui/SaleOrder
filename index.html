@@ -3,35 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sales Order Automation Web Tool</title>
-    <!-- SheetJS Library with Full Styling Support -->
+    <title>Sales Order Automation Tool - Professional Edition</title>
+    <!-- SheetJS Library -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; }
-        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 700px; margin: auto; }
-        h2 { color: #1a73e8; margin-top: 0; }
-        p { color: #555; }
-        .upload-box { border: 2px dashed #ccc; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0; background: #fafafa; }
-        input[type="file"] { margin: 10px 0; }
-        button { background: #1a73e8; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; transition: background 0.3s; }
-        button:hover { background: #1557b0; }
-        #log { margin-top: 20px; white-space: pre-line; background: #e8f0fe; padding: 15px; border-radius: 6px; border-left: 5px solid #1a73e8; font-family: monospace; font-size: 14px; max-height: 200px; overflow-y: auto; }
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg-gradient: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #cbd5e1;
+        }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            max-width: 650px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #f1f5f9;
+            padding-bottom: 20px;
+        }
+        .header h2 {
+            margin: 0;
+            color: var(--primary);
+            font-size: 24px;
+        }
+        .header p {
+            margin: 5px 0 0 0;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        .upload-box {
+            border: 2px dashed var(--border-color);
+            padding: 30px 20px;
+            text-align: center;
+            border-radius: 12px;
+            margin: 20px 0;
+            background: #fafafa;
+            transition: all 0.3s ease;
+        }
+        .upload-box:hover {
+            border-color: var(--primary);
+            background: #f8fafc;
+        }
+        input[type="file"] {
+            margin: 15px 0;
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            transition: background 0.3s ease, transform 0.1s ease;
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);
+        }
+        button:hover {
+            background: var(--primary-hover);
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        #log {
+            margin-top: 25px;
+            white-space: pre-line;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 13px;
+            color: #334155;
+            max-height: 180px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>📊 Sales Order Automation Tool</h2>
-    <p>Apni Inbound Excel Files aur Output Template (Output.xlsx) select karein:</p>
+    <div class="header">
+        <div>
+            <h2>📊 Sales Order Automation Hub</h2>
+            <p>Upload your inbound demand files & Output.xlsx template below.</p>
+        </div>
+    </div>
     
     <div class="upload-box">
-        <label><strong>Select Files (Input files + Output.xlsx template):</strong></label><br>
+        <label><strong>Select Inbound Excel Files + Output.xlsx Template:</strong></label><br>
         <input type="file" id="excelFiles" accept=".xlsx, .xls" multiple />
     </div>
 
     <button onclick="processSalesOrders()">Process & Generate Orders</button>
     
-    <div id="log">Status: Ready. Kripya files select karke process button dabayein.</div>
+    <div id="log">Status: Ready. Please select files and click the process button.</div>
 </div>
 
 <script>
@@ -71,7 +163,6 @@
             let wsInput = wbInput.Sheets[wbInput.SheetNames[0]];
             let jsonInput = XLSX.utils.sheet_to_json(wsInput, {header: 1});
 
-            // 1. Find FG Row & Column
             let fgRow = -1, fgCol = -1;
             for (let r = 0; r < jsonInput.length; r++) {
                 for (let c = 0; c < jsonInput[r].length; c++) {
@@ -90,7 +181,6 @@
                 continue;
             }
 
-            // 2. Route Number Finding
             let routeNum = "22";
             for (let r = 0; r < fgRow; r++) {
                 for (let c = 0; c < 10; c++) {
@@ -105,7 +195,6 @@
                 if (routeNum !== "22") break;
             }
 
-            // 3. Agency Column Detection
             let agencyCol = -1;
             for (let c = 0; c < fgCol; c++) {
                 let headerText = String(jsonInput[fgRow - 1] ? jsonInput[fgRow - 1][c] : "").toUpperCase().replace(/\s+/g, "");
@@ -116,7 +205,6 @@
             }
             if (agencyCol === -1) agencyCol = 2;
 
-            // 4. Strict Valid FG Columns (Excluding Total & Remarks)
             let validCols = [];
             for (let c = fgCol; c < jsonInput[fgRow].length; c++) {
                 let fgCode = String(jsonInput[fgRow][c] || "").trim();
@@ -128,14 +216,13 @@
                 validCols.push(c);
             }
 
-            // 5. Read template with cell styles enabled
             let clonedBuffer = templateArrayBuffer.slice(0);
             let templateWb = XLSX.read(clonedBuffer, {type: 'array', cellStyles: true, cellNF: true});
             let sheetName = templateWb.SheetNames.includes("Order Data") ? "Order Data" : templateWb.SheetNames[0];
             let templateWs = templateWb.Sheets[sheetName];
 
             let salesOrderNum = 1;
-            let rowIdx = 5; // Excel Row 6 (0-indexed 5)
+            let rowIdx = 5;
             let todayDate = new Date().toISOString().slice(0, 10);
 
             for (let r = fgRow + 1; r < jsonInput.length; r++) {
@@ -155,7 +242,6 @@
                                 if (!templateWs[cellRef]) {
                                     templateWs[cellRef] = { t: typeof val === 'number' ? 'n' : 's', v: val };
                                 } else {
-                                    // Keep existing style reference if available, just update value and type
                                     let existingStyle = templateWs[cellRef].s;
                                     templateWs[cellRef].v = val;
                                     templateWs[cellRef].t = typeof val === 'number' ? 'n' : 's';
@@ -163,23 +249,23 @@
                                 }
                             }
 
-                            setCellClean(rowIdx, 1, salesOrderNum); // Col B
-                            setCellClean(rowIdx, 2, "OR");          // Col C
-                            setCellClean(rowIdx, 3, "SO20");        // Col D
-                            setCellClean(rowIdx, 4, 10);            // Col E
-                            setCellClean(rowIdx, 5, 20);            // Col F
-                            setCellClean(rowIdx, 6, "DR" + agency); // Col G
-                            setCellClean(rowIdx, 7, "DR" + agency); // Col H
-                            setCellClean(rowIdx, 8, "REF-" + agency + "-" + todayDate); // Col I
-                            setCellClean(rowIdx, 9, todayDate);     // Col J
-                            setCellClean(rowIdx, 10, todayDate);    // Col K
-                            setCellClean(rowIdx, 14, itemID);       // Col O
-                            setCellClean(rowIdx, 15, fgName);       // Col P
-                            setCellClean(rowIdx, 18, skuQty);       // Col S
-                            setCellClean(rowIdx, 19, "Bag");        // Col T
-                            setCellClean(rowIdx, 21, 2100);         // Col V
-                            setCellClean(rowIdx, 25, routeNum);     // Col Z
-                            setCellClean(rowIdx, 26, agency);       // Col AA
+                            setCellClean(rowIdx, 1, salesOrderNum);
+                            setCellClean(rowIdx, 2, "OR");
+                            setCellClean(rowIdx, 3, "SO20");
+                            setCellClean(rowIdx, 4, 10);
+                            setCellClean(rowIdx, 5, 20);
+                            setCellClean(rowIdx, 6, "DR" + agency);
+                            setCellClean(rowIdx, 7, "DR" + agency);
+                            setCellClean(rowIdx, 8, "REF-" + agency + "-" + todayDate);
+                            setCellClean(rowIdx, 9, todayDate);
+                            setCellClean(rowIdx, 10, todayDate);
+                            setCellClean(rowIdx, 14, itemID);
+                            setCellClean(rowIdx, 15, fgName);
+                            setCellClean(rowIdx, 18, skuQty);
+                            setCellClean(rowIdx, 19, "Bag");
+                            setCellClean(rowIdx, 21, 2100);
+                            setCellClean(rowIdx, 25, routeNum);
+                            setCellClean(rowIdx, 26, agency);
 
                             itemID += 10;
                             rowIdx++;

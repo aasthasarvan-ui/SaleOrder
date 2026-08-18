@@ -56,194 +56,171 @@
 
         logDiv.innerText = "Status: Processing started...\n";
 
-        try {
-            let templateFile = filesMap['output.xlsx'];
-            let templateArrayBuffer = await templateFile.arrayBuffer();
-            let totalProcessed = 0;
+        // Read Template File as ArrayBuffer to preserve formatting & theme
+        let templateFile = filesMap['output.xlsx'];
+        let templateArrayBuffer = await templateFile.arrayBuffer();
 
-            for (let fileName in filesMap) {
-                if (fileName === 'output.xlsx') continue;
+        let totalProcessed = 0;
 
-                logDiv.innerText += `Processing: ${fileName}...\n`;
-                
-                let file = filesMap[fileName];
-                let data = await file.arrayBuffer();
-                
-                // Clean and safe reading without triggering internal format bugs
-                let wbInput = XLSX.read(data, {type: 'array'});
-                let wsInput = wbInput.Sheets[wbInput.SheetNames[0]];
-                let jsonInput = XLSX.utils.sheet_to_json(wsInput, {header: 1, defval: ""});
+        for (let fileName in filesMap) {
+            if (fileName === 'output.xlsx') continue;
 
-                // 1. Find FG Row & Column Safely
-                let fgRow = -1, fgCol = -1;
-                for (let r = 0; r < jsonInput.length; r++) {
-                    if (!jsonInput[r]) continue;
-                    for (let c = 0; c < jsonInput[r].length; c++) {
-                        let cellVal = jsonInput[r][c];
-                        let val = (cellVal !== null && cellVal !== undefined) ? String(cellVal).trim().toUpperCase() : "";
-                        if (val.indexOf("FG") === 0 || val.includes("FG")) {
-                            fgRow = r;
-                            fgCol = c;
-                            break;
-                        }
+            logDiv.innerText += `Processing: ${fileName}...\n`;
+            let file = filesMap[fileName];
+            let data = await file.arrayBuffer();
+            let wbInput = XLSX.read(data, {type: 'array'});
+            let wsInput = wbInput.Sheets[wbInput.SheetNames[0]];
+            let jsonInput = XLSX.utils.sheet_to_json(wsInput, {header: 1});
+
+            // 1. Find FG Row & Column
+            let fgRow = -1, fgCol = -1;
+            for (let r = 0; r < jsonInput.length; r++) {
+                for (let c = 0; c < jsonInput[r].length; c++) {
+                    let val = String(jsonInput[r][c] || "").trim().toUpperCase();
+                    if (val.startsWith("FG")) {
+                        fgRow = r;
+                        fgCol = c;
+                        break;
                     }
-                    if (fgRow !== -1) break;
                 }
+                if (fgRow !== -1) break;
+            }
 
-                if (fgRow === -1) {
-                    logDiv.innerText += `❌ Error in ${fileName}: 'FG' code nahi mila.\n`;
-                    continue;
-                }
+            if (fgRow === -1) {
+                logDiv.innerText += `❌ Error in ${fileName}: 'FG' code nahi mila.\n`;
+                continue;
+            }
 
-                // 2. Route Number Finding Safely
-                let routeNum = "22";
-                for (let r = 0; r < fgRow; r++) {
-                    if (!jsonInput[r]) continue;
-                    for (let c = 0; c < 10; c++) {
-                        let cellVal = jsonInput[r][c];
-                        let strVal = (cellVal !== null && cellVal !== undefined) ? String(cellVal).trim() : "";
-                        let upperVal = strVal.toUpperCase();
-                        if (strVal !== "" && strVal.length <= 6 && /\d/.test(strVal) &&
-                            upperVal.indexOf("SALES") === -1 && upperVal.indexOf("CONTACT") === -1 && 
-                            upperVal.indexOf("ROUTE") === -1 && upperVal.indexOf("MATERIAL") === -1) {
-                            routeNum = strVal;
-                            break;
-                        }
+            // 2. Route Number Finding
+            let routeNum = "22";
+            for (let r = 0; r < fgRow; r++) {
+                for (let c = 0; c < 10; c++) {
+                    let cellVal = String(jsonInput[r][c] || "").trim();
+                    let upperVal = cellVal.toUpperCase();
+                    if (cellVal !== "" && cellVal.length <= 6 && /\d/.test(cellVal) &&
+                        !["SALES PERSON", "CONTACT NO:", "RT DR", "ROUTE", "MATERIAL CODE"].includes(upperVal)) {
+                        routeNum = cellVal;
+                        break;
                     }
-                    if (routeNum !== "22") break;
                 }
+                if (routeNum !== "22") break;
+            }
 
-                // 3. Agency Column Detection Safely
-                let agencyCol = -1;
-                let headerRowPrev = jsonInput[fgRow - 1] || [];
+            // 3. Agency Column Detection
+            let agencyCol = -1;
+            for (let c = 0; c < fgCol; c++) {
+                let headerText = String(jsonInput[fgRow - 1] ? jsonInput[fgRow - 1][c] : "").toUpperCase().replace(/\s+/g, "");
+                if (headerText.includes("AG") && !headerText.includes("SALES")) {
+                    agencyCol = c;
+                    break;
+                }
+            }
+
+            if (agencyCol === -1) {
                 for (let c = 0; c < fgCol; c++) {
-                    let hVal = headerRowPrev[c];
-                    let headerText = (hVal !== null && hVal !== undefined) ? String(hVal).toUpperCase().replace(/\s+/g, "") : "";
-                    if (headerText.indexOf("AG") !== -1 && headerText.indexOf("SALES") === -1) {
+                    let hText = String(jsonInput[fgRow - 1] ? jsonInput[fgRow - 1][c] : "").toUpperCase();
+                    if (hText.includes("SR") || hText.includes("SERIAL") || hText.includes("S.NO") || hText.includes("NO")) continue;
+                    
+                    let isNum = true, count = 0;
+                    for (let r = fgRow + 1; r < jsonInput.length; r++) {
+                        let v = jsonInput[r][c];
+                        if (v !== undefined && v !== "") {
+                            if (isNaN(v)) { isNum = false; break; }
+                            count++;
+                        }
+                    }
+                    if (isNum && count > 0 && c !== 0) {
                         agencyCol = c;
                         break;
                     }
                 }
-
-                if (agencyCol === -1) {
-                    for (let c = 0; c < fgCol; c++) {
-                        let hVal = headerRowPrev[c];
-                        let hText = (hVal !== null && hVal !== undefined) ? String(hVal).toUpperCase() : "";
-                        if (hText.indexOf("SR") !== -1 || hText.indexOf("SERIAL") !== -1 || hText.indexOf("S.NO") !== -1) continue;
-                        
-                        let isNum = true, count = 0;
-                        for (let r = fgRow + 1; r < jsonInput.length; r++) {
-                            if (!jsonInput[r]) continue;
-                            let v = jsonInput[r][c];
-                            if (v !== undefined && v !== "" && v !== null) {
-                                if (isNaN(v)) { isNum = false; break; }
-                                count++;
-                            }
-                        }
-                        if (isNum && count > 0 && c !== 0) {
-                            agencyCol = c;
-                            break;
-                        }
-                    }
-                }
-
-                if (agencyCol === -1) agencyCol = 2;
-
-                // 4. Total/Sum Column Detection Safely
-                let totalCol = -1;
-                let fgHeaderRow = jsonInput[fgRow] || [];
-                for (let c = fgCol; c < fgHeaderRow.length; c++) {
-                    let hVal = fgHeaderRow[c];
-                    let hText = (hVal !== null && hVal !== undefined) ? String(hVal).trim().toUpperCase() : "";
-                    if (hText === "TOTAL" || hText.indexOf("TOTAL") !== -1 || hText === "SUM") {
-                        totalCol = c;
-                        break;
-                    }
-                }
-                if (totalCol === -1) totalCol = fgHeaderRow.length;
-
-                // 5. Open template cleanly
-                let clonedBuffer = templateArrayBuffer.slice(0);
-                let templateWb = XLSX.read(clonedBuffer, {type: 'array'});
-                let sheetName = templateWb.SheetNames.includes("Order Data") ? "Order Data" : templateWb.SheetNames[0];
-                let templateWs = templateWb.Sheets[sheetName];
-
-                let salesOrderNum = 1;
-                let rowIdx = 5; // Excel Row 6
-                let todayDate = new Date().toISOString().slice(0, 10);
-
-                for (let r = fgRow + 1; r < jsonInput.length; r++) {
-                    if (!jsonInput[r]) continue;
-                    let agency = jsonInput[r][agencyCol];
-                    if (agency !== undefined && agency !== "" && agency !== null && !isNaN(agency)) {
-                        let itemID = 10;
-                        let rowHasItems = false;
-
-                        for (let c = fgCol; c < totalCol; c++) {
-                            let skuQty = Number(jsonInput[r][c] || 0);
-                            if (skuQty > 0) {
-                                rowHasItems = true;
-                                let fgNameVal = fgHeaderRow[c];
-                                let fgName = (fgNameVal !== null && fgNameVal !== undefined) ? String(fgNameVal) : "";
-
-                                function setCellSafe(rIndex, cIndex, val) {
-                                    let cellRef = XLSX.utils.encode_cell({r: rIndex, c: cIndex});
-                                    if (!templateWs[cellRef]) {
-                                        templateWs[cellRef] = { t: 's', v: val };
-                                    } else {
-                                        templateWs[cellRef].v = val;
-                                        templateWs[cellRef].t = typeof val === 'number' ? 'n' : 's';
-                                        if (templateWs[cellRef].w) delete templateWs[cellRef].w;
-                                    }
-                                }
-
-                                setCellSafe(rowIdx, 1, salesOrderNum);
-                                setCellSafe(rowIdx, 2, "OR");
-                                setCellSafe(rowIdx, 3, "SO20");
-                                setCellSafe(rowIdx, 4, 10);
-                                setCellSafe(rowIdx, 5, 20);
-                                setCellSafe(rowIdx, 6, "DR" + agency);
-                                setCellSafe(rowIdx, 7, "DR" + agency);
-                                setCellSafe(rowIdx, 8, "REF-" + agency + "-" + todayDate);
-                                setCellSafe(rowIdx, 9, todayDate);
-                                setCellSafe(rowIdx, 10, todayDate);
-                                setCellSafe(rowIdx, 14, itemID);
-                                setCellSafe(rowIdx, 15, fgName);
-                                setCellSafe(rowIdx, 18, skuQty);
-                                setCellSafe(rowIdx, 19, "Bag");
-                                setCellSafe(rowIdx, 21, 2100);
-                                setCellSafe(rowIdx, 25, routeNum);
-                                setCellSafe(rowIdx, 26, agency);
-
-                                itemID += 10;
-                                rowIdx++;
-                            }
-                        }
-                        if (rowHasItems) salesOrderNum++;
-                    }
-                }
-
-                let range = XLSX.utils.decode_range(templateWs['!ref'] || "A1:Z1");
-                if (rowIdx > range.e.r) {
-                    range.e.r = rowIdx;
-                    templateWs['!ref'] = XLSX.utils.encode_range(range);
-                }
-
-                let safeRoute = String(routeNum).replace(/[\/\\?%*:|"<>]/g, "-");
-                let timeStamp = new Date().toTimeString().slice(0,8).replace(/:/g,"");
-                
-                XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`);
-                
-                totalProcessed++;
-                logDiv.innerText += `✅ Success: ${fileName} generated successfully.\n`;
             }
 
-            logDiv.innerText += `\n🎉 All Done! Total ${totalProcessed} files successfully generated.`;
+            if (agencyCol === -1) agencyCol = 2;
 
-        } catch (err) {
-            console.error(err);
-            logDiv.innerText += `\n❌ Error occurred: ${err.message}`;
+            // 4. Total/Sum Column Detection
+            let totalCol = -1;
+            for (let c = fgCol; c < jsonInput[fgRow].length; c++) {
+                let hText = String(jsonInput[fgRow][c] || "").trim().toUpperCase();
+                if (hText === "TOTAL" || hText.includes("TOTAL") || hText === "SUM") {
+                    totalCol = c;
+                    break;
+                }
+            }
+            if (totalCol === -1) totalCol = jsonInput[fgRow].length;
+
+            // 5. Open fresh copy of template for this file to keep original styling/theme
+            let clonedBuffer = templateArrayBuffer.slice(0);
+            let templateWb = XLSX.read(clonedBuffer, {type: 'array', cellStyles: true, cellFormulas: true});
+            let sheetName = templateWb.SheetNames.includes("Order Data") ? "Order Data" : templateWb.SheetNames[0];
+            let templateWs = templateWb.Sheets[sheetName];
+
+            let salesOrderNum = 1;
+            let rowIdx = 5; // Excel Row 6 (0-indexed 5)
+            let todayDate = new Date().toISOString().slice(0, 10);
+
+            for (let r = fgRow + 1; r < jsonInput.length; r++) {
+                let agency = jsonInput[r][agencyCol];
+                if (agency !== undefined && agency !== "" && !isNaN(agency)) {
+                    let itemID = 10;
+                    let rowHasItems = false;
+
+                    for (let c = fgCol; c < totalCol; c++) {
+                        let skuQty = Number(jsonInput[r][c]);
+                        if (skuQty > 0) {
+                            rowHasItems = true;
+                            let fgName = jsonInput[fgRow][c];
+
+                            function setCell(rIndex, cIndex, val) {
+                                let cellRef = XLSX.utils.encode_cell({r: rIndex, c: cIndex});
+                                templateWs[cellRef] = templateWs[cellRef] || { t: 's' };
+                                templateWs[cellRef].v = val;
+                                templateWs[cellRef].t = typeof val === 'number' ? 'n' : 's';
+                            }
+
+                            setCell(rowIdx, 1, salesOrderNum); // Col B
+                            setCell(rowIdx, 2, "OR");          // Col C
+                            setCell(rowIdx, 3, "SO20");        // Col D
+                            setCell(rowIdx, 4, 10);            // Col E
+                            setCell(rowIdx, 5, 20);            // Col F
+                            setCell(rowIdx, 6, "DR" + agency); // Col G
+                            setCell(rowIdx, 7, "DR" + agency); // Col H
+                            setCell(rowIdx, 8, "REF-" + agency + "-" + todayDate); // Col I
+                            setCell(rowIdx, 9, todayDate);     // Col J
+                            setCell(rowIdx, 10, todayDate);    // Col K
+                            setCell(rowIdx, 14, itemID);       // Col O
+                            setCell(rowIdx, 15, fgName);       // Col P
+                            setCell(rowIdx, 18, skuQty);       // Col S
+                            setCell(rowIdx, 19, "Bag");        // Col T
+                            setCell(rowIdx, 21, 2100);         // Col V
+                            setCell(rowIdx, 25, routeNum);     // Col Z
+                            setCell(rowIdx, 26, agency);       // Col AA
+
+                            itemID += 10;
+                            rowIdx++;
+                        }
+                    }
+                    if (rowHasItems) salesOrderNum++;
+                }
+            }
+
+            // Update sheet range reference
+            let range = XLSX.utils.decode_range(templateWs['!ref'] || "A1:Z1");
+            if (rowIdx > range.e.r) {
+                range.e.r = rowIdx;
+                templateWs['!ref'] = XLSX.utils.encode_range(range);
+            }
+
+            // Trigger Browser Download keeping original template structure
+            let safeRoute = String(routeNum).replace(/[\/\\?%*:|"<>]/g, "-");
+            let timeStamp = new Date().toTimeString().slice(0,8).replace(/:/g,"");
+            XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`);
+            
+            totalProcessed++;
+            logDiv.innerText += `✅ Success: ${fileName} processed with original template theme.\n`;
         }
+
+        logDiv.innerText += `\n🎉 All Done! Total ${totalProcessed} files processed & downloaded.`;
     }
 </script>
 

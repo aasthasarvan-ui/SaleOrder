@@ -56,7 +56,6 @@
 
         logDiv.innerText = "Status: Processing started...\n";
 
-        // Read Template File as ArrayBuffer to preserve formatting & theme
         let templateFile = filesMap['output.xlsx'];
         let templateArrayBuffer = await templateFile.arrayBuffer();
 
@@ -115,41 +114,21 @@
                     break;
                 }
             }
-
-            if (agencyCol === -1) {
-                for (let c = 0; c < fgCol; c++) {
-                    let hText = String(jsonInput[fgRow - 1] ? jsonInput[fgRow - 1][c] : "").toUpperCase();
-                    if (hText.includes("SR") || hText.includes("SERIAL") || hText.includes("S.NO") || hText.includes("NO")) continue;
-                    
-                    let isNum = true, count = 0;
-                    for (let r = fgRow + 1; r < jsonInput.length; r++) {
-                        let v = jsonInput[r][c];
-                        if (v !== undefined && v !== "") {
-                            if (isNaN(v)) { isNum = false; break; }
-                            count++;
-                        }
-                    }
-                    if (isNum && count > 0 && c !== 0) {
-                        agencyCol = c;
-                        break;
-                    }
-                }
-            }
-
             if (agencyCol === -1) agencyCol = 2;
 
-            // 4. Total/Sum Column Detection
-            let totalCol = -1;
+            // 4. Strict Valid FG Columns (Excluding Total & Remarks)
+            let validCols = [];
             for (let c = fgCol; c < jsonInput[fgRow].length; c++) {
-                let hText = String(jsonInput[fgRow][c] || "").trim().toUpperCase();
-                if (hText === "TOTAL" || hText.includes("TOTAL") || hText === "SUM") {
-                    totalCol = c;
+                let fgCode = String(jsonInput[fgRow][c] || "").trim();
+                let headerName = String(jsonInput[fgRow - 1] ? jsonInput[fgRow - 1][c] : "").trim().toUpperCase();
+                
+                if (headerName.includes("TOTAL") || headerName.includes("REMARK") || !fgCode.toUpperCase().startsWith("FG")) {
                     break;
                 }
+                validCols.push(c);
             }
-            if (totalCol === -1) totalCol = jsonInput[fgRow].length;
 
-            // 5. Open fresh copy of template for this file to keep original styling/theme
+            // 5. Open fresh copy of template keeping styling/theme 100% untouched
             let clonedBuffer = templateArrayBuffer.slice(0);
             let templateWb = XLSX.read(clonedBuffer, {type: 'array', cellStyles: true, cellFormulas: true});
             let sheetName = templateWb.SheetNames.includes("Order Data") ? "Order Data" : templateWb.SheetNames[0];
@@ -165,17 +144,20 @@
                     let itemID = 10;
                     let rowHasItems = false;
 
-                    for (let c = fgCol; c < totalCol; c++) {
+                    for (let c of validCols) {
                         let skuQty = Number(jsonInput[r][c]);
                         if (skuQty > 0) {
                             rowHasItems = true;
-                            let fgName = jsonInput[fgRow][c];
+                            let fgName = String(jsonInput[fgRow][c]).trim();
 
                             function setCell(rIndex, cIndex, val) {
                                 let cellRef = XLSX.utils.encode_cell({r: rIndex, c: cIndex});
-                                templateWs[cellRef] = templateWs[cellRef] || { t: 's' };
-                                templateWs[cellRef].v = val;
-                                templateWs[cellRef].t = typeof val === 'number' ? 'n' : 's';
+                                if (!templateWs[cellRef]) {
+                                    templateWs[cellRef] = { t: typeof val === 'number' ? 'n' : 's', v: val };
+                                } else {
+                                    templateWs[cellRef].v = val;
+                                    templateWs[cellRef].t = typeof val === 'number' ? 'n' : 's';
+                                }
                             }
 
                             setCell(rowIdx, 1, salesOrderNum); // Col B
@@ -204,14 +186,12 @@
                 }
             }
 
-            // Update sheet range reference
             let range = XLSX.utils.decode_range(templateWs['!ref'] || "A1:Z1");
             if (rowIdx > range.e.r) {
                 range.e.r = rowIdx;
                 templateWs['!ref'] = XLSX.utils.encode_range(range);
             }
 
-            // Trigger Browser Download keeping original template structure
             let safeRoute = String(routeNum).replace(/[\/\\?%*:|"<>]/g, "-");
             let timeStamp = new Date().toTimeString().slice(0,8).replace(/:/g,"");
             XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`);

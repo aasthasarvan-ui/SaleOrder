@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sales Order Automation Web Tool</title>
-    <!-- SheetJS Library -->
+    <!-- SheetJS Library with Style Support -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; }
@@ -56,7 +56,7 @@
 
         logDiv.innerText = "Status: Processing started...\n";
 
-        // Read Template File as ArrayBuffer to preserve formatting & theme
+        // Read Template File as ArrayBuffer
         let templateFile = filesMap['output.xlsx'];
         let templateArrayBuffer = await templateFile.arrayBuffer();
 
@@ -149,14 +149,14 @@
             }
             if (totalCol === -1) totalCol = jsonInput[fgRow].length;
 
-            // 5. Open fresh copy of template for this file to keep original styling/theme
+            // 5. Open template with cell styles enabled
             let clonedBuffer = templateArrayBuffer.slice(0);
             let templateWb = XLSX.read(clonedBuffer, {type: 'array', cellStyles: true, cellFormulas: true});
             let sheetName = templateWb.SheetNames.includes("Order Data") ? "Order Data" : templateWb.SheetNames[0];
             let templateWs = templateWb.Sheets[sheetName];
 
             let salesOrderNum = 1;
-            let rowIdx = 5; // Excel Row 6 (0-indexed 5)
+            let rowIdx = 5; // Excel Row 6
             let todayDate = new Date().toISOString().slice(0, 10);
 
             for (let r = fgRow + 1; r < jsonInput.length; r++) {
@@ -171,30 +171,34 @@
                             rowHasItems = true;
                             let fgName = jsonInput[fgRow][c];
 
-                            function setCell(rIndex, cIndex, val) {
+                            function setCellPreserveStyle(rIndex, cIndex, val) {
                                 let cellRef = XLSX.utils.encode_cell({r: rIndex, c: cIndex});
-                                templateWs[cellRef] = templateWs[cellRef] || { t: 's' };
-                                templateWs[cellRef].v = val;
-                                templateWs[cellRef].t = typeof val === 'number' ? 'n' : 's';
+                                if (!templateWs[cellRef]) {
+                                    templateWs[cellRef] = { t: 's', v: val };
+                                } else {
+                                    templateWs[cellRef].v = val;
+                                    templateWs[cellRef].t = typeof val === 'number' ? 'n' : 's';
+                                    delete templateWs[cellRef].w; // clear formatted string cache so excel recalculates
+                                }
                             }
 
-                            setCell(rowIdx, 1, salesOrderNum); // Col B
-                            setCell(rowIdx, 2, "OR");          // Col C
-                            setCell(rowIdx, 3, "SO20");        // Col D
-                            setCell(rowIdx, 4, 10);            // Col E
-                            setCell(rowIdx, 5, 20);            // Col F
-                            setCell(rowIdx, 6, "DR" + agency); // Col G
-                            setCell(rowIdx, 7, "DR" + agency); // Col H
-                            setCell(rowIdx, 8, "REF-" + agency + "-" + todayDate); // Col I
-                            setCell(rowIdx, 9, todayDate);     // Col J
-                            setCell(rowIdx, 10, todayDate);    // Col K
-                            setCell(rowIdx, 14, itemID);       // Col O
-                            setCell(rowIdx, 15, fgName);       // Col P
-                            setCell(rowIdx, 18, skuQty);       // Col S
-                            setCell(rowIdx, 19, "Bag");        // Col T
-                            setCell(rowIdx, 21, 2100);         // Col V
-                            setCell(rowIdx, 25, routeNum);     // Col Z
-                            setCell(rowIdx, 26, agency);       // Col AA
+                            setCellPreserveStyle(rowIdx, 1, salesOrderNum); // Col B
+                            setCellPreserveStyle(rowIdx, 2, "OR");          // Col C
+                            setCellPreserveStyle(rowIdx, 3, "SO20");        // Col D
+                            setCellPreserveStyle(rowIdx, 4, 10);            // Col E
+                            setCellPreserveStyle(rowIdx, 5, 20);            // Col F
+                            setCellPreserveStyle(rowIdx, 6, "DR" + agency); // Col G
+                            setCellPreserveStyle(rowIdx, 7, "DR" + agency); // Col H
+                            setCellPreserveStyle(rowIdx, 8, "REF-" + agency + "-" + todayDate); // Col I
+                            setCellPreserveStyle(rowIdx, 9, todayDate);     // Col J
+                            setCellPreserveStyle(rowIdx, 10, todayDate);    // Col K
+                            setCellPreserveStyle(rowIdx, 14, itemID);       // Col O
+                            setCellPreserveStyle(rowIdx, 15, fgName);       // Col P
+                            setCellPreserveStyle(rowIdx, 18, skuQty);       // Col S
+                            setCellPreserveStyle(rowIdx, 19, "Bag");        // Col T
+                            setCellPreserveStyle(rowIdx, 21, 2100);         // Col V
+                            setCellPreserveStyle(rowIdx, 25, routeNum);     // Col Z
+                            setCellPreserveStyle(rowIdx, 26, agency);       // Col AA
 
                             itemID += 10;
                             rowIdx++;
@@ -204,20 +208,20 @@
                 }
             }
 
-            // Update sheet range reference
+            // Update range reference
             let range = XLSX.utils.decode_range(templateWs['!ref'] || "A1:Z1");
             if (rowIdx > range.e.r) {
                 range.e.r = rowIdx;
                 templateWs['!ref'] = XLSX.utils.encode_range(range);
             }
 
-            // Trigger Browser Download keeping original template structure
+            // Write with full styling options
             let safeRoute = String(routeNum).replace(/[\/\\?%*:|"<>]/g, "-");
             let timeStamp = new Date().toTimeString().slice(0,8).replace(/:/g,"");
-            XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`);
+            XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`, { cellStyles: true });
             
             totalProcessed++;
-            logDiv.innerText += `✅ Success: ${fileName} processed with original template theme.\n`;
+            logDiv.innerText += `✅ Success: ${fileName} processed with exact template styling.\n`;
         }
 
         logDiv.innerText += `\n🎉 All Done! Total ${totalProcessed} files processed & downloaded.`;

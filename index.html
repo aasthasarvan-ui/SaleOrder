@@ -69,8 +69,8 @@
                 let file = filesMap[fileName];
                 let data = await file.arrayBuffer();
                 
-                // Safe read options to prevent internal library crashes on formulas/styles
-                let wbInput = XLSX.read(data, {type: 'array', cellFormula: false, cellStyles: false});
+                // Clean and safe reading without triggering internal format bugs
+                let wbInput = XLSX.read(data, {type: 'array'});
                 let wsInput = wbInput.Sheets[wbInput.SheetNames[0]];
                 let jsonInput = XLSX.utils.sheet_to_json(wsInput, {header: 1, defval: ""});
 
@@ -81,7 +81,7 @@
                     for (let c = 0; c < jsonInput[r].length; c++) {
                         let cellVal = jsonInput[r][c];
                         let val = (cellVal !== null && cellVal !== undefined) ? String(cellVal).trim().toUpperCase() : "";
-                        if (val.startsWith("FG")) {
+                        if (val.indexOf("FG") === 0 || val.includes("FG")) {
                             fgRow = r;
                             fgCol = c;
                             break;
@@ -104,7 +104,8 @@
                         let strVal = (cellVal !== null && cellVal !== undefined) ? String(cellVal).trim() : "";
                         let upperVal = strVal.toUpperCase();
                         if (strVal !== "" && strVal.length <= 6 && /\d/.test(strVal) &&
-                            !["SALES PERSON", "CONTACT NO:", "RT DR", "ROUTE", "MATERIAL CODE"].includes(upperVal)) {
+                            upperVal.indexOf("SALES") === -1 && upperVal.indexOf("CONTACT") === -1 && 
+                            upperVal.indexOf("ROUTE") === -1 && upperVal.indexOf("MATERIAL") === -1) {
                             routeNum = strVal;
                             break;
                         }
@@ -118,7 +119,7 @@
                 for (let c = 0; c < fgCol; c++) {
                     let hVal = headerRowPrev[c];
                     let headerText = (hVal !== null && hVal !== undefined) ? String(hVal).toUpperCase().replace(/\s+/g, "") : "";
-                    if (headerText.includes("AG") && !headerText.includes("SALES")) {
+                    if (headerText.indexOf("AG") !== -1 && headerText.indexOf("SALES") === -1) {
                         agencyCol = c;
                         break;
                     }
@@ -128,7 +129,7 @@
                     for (let c = 0; c < fgCol; c++) {
                         let hVal = headerRowPrev[c];
                         let hText = (hVal !== null && hVal !== undefined) ? String(hVal).toUpperCase() : "";
-                        if (hText.includes("SR") || hText.includes("SERIAL") || hText.includes("S.NO") || hText.includes("NO")) continue;
+                        if (hText.indexOf("SR") !== -1 || hText.indexOf("SERIAL") !== -1 || hText.indexOf("S.NO") !== -1) continue;
                         
                         let isNum = true, count = 0;
                         for (let r = fgRow + 1; r < jsonInput.length; r++) {
@@ -154,16 +155,16 @@
                 for (let c = fgCol; c < fgHeaderRow.length; c++) {
                     let hVal = fgHeaderRow[c];
                     let hText = (hVal !== null && hVal !== undefined) ? String(hVal).trim().toUpperCase() : "";
-                    if (hText === "TOTAL" || hText.includes("TOTAL") || hText === "SUM") {
+                    if (hText === "TOTAL" || hText.indexOf("TOTAL") !== -1 || hText === "SUM") {
                         totalCol = c;
                         break;
                     }
                 }
                 if (totalCol === -1) totalCol = fgHeaderRow.length;
 
-                // 5. Open template maintaining full structural theme safely
+                // 5. Open template cleanly
                 let clonedBuffer = templateArrayBuffer.slice(0);
-                let templateWb = XLSX.read(clonedBuffer, {type: 'array', cellStyles: true, cellFormulas: true});
+                let templateWb = XLSX.read(clonedBuffer, {type: 'array'});
                 let sheetName = templateWb.SheetNames.includes("Order Data") ? "Order Data" : templateWb.SheetNames[0];
                 let templateWs = templateWb.Sheets[sheetName];
 
@@ -185,7 +186,7 @@
                                 let fgNameVal = fgHeaderRow[c];
                                 let fgName = (fgNameVal !== null && fgNameVal !== undefined) ? String(fgNameVal) : "";
 
-                                function setCellExact(rIndex, cIndex, val) {
+                                function setCellSafe(rIndex, cIndex, val) {
                                     let cellRef = XLSX.utils.encode_cell({r: rIndex, c: cIndex});
                                     if (!templateWs[cellRef]) {
                                         templateWs[cellRef] = { t: 's', v: val };
@@ -196,23 +197,23 @@
                                     }
                                 }
 
-                                setCellExact(rowIdx, 1, salesOrderNum);
-                                setCellExact(rowIdx, 2, "OR");
-                                setCellExact(rowIdx, 3, "SO20");
-                                setCellExact(rowIdx, 4, 10);
-                                setCellExact(rowIdx, 5, 20);
-                                setCellExact(rowIdx, 6, "DR" + agency);
-                                setCellExact(rowIdx, 7, "DR" + agency);
-                                setCellExact(rowIdx, 8, "REF-" + agency + "-" + todayDate);
-                                setCellExact(rowIdx, 9, todayDate);
-                                setCellExact(rowIdx, 10, todayDate);
-                                setCellExact(rowIdx, 14, itemID);
-                                setCellExact(rowIdx, 15, fgName);
-                                setCellExact(rowIdx, 18, skuQty);
-                                setCellExact(rowIdx, 19, "Bag");
-                                setCellExact(rowIdx, 21, 2100);
-                                setCellExact(rowIdx, 25, routeNum);
-                                setCellExact(rowIdx, 26, agency);
+                                setCellSafe(rowIdx, 1, salesOrderNum);
+                                setCellSafe(rowIdx, 2, "OR");
+                                setCellSafe(rowIdx, 3, "SO20");
+                                setCellSafe(rowIdx, 4, 10);
+                                setCellSafe(rowIdx, 5, 20);
+                                setCellSafe(rowIdx, 6, "DR" + agency);
+                                setCellSafe(rowIdx, 7, "DR" + agency);
+                                setCellSafe(rowIdx, 8, "REF-" + agency + "-" + todayDate);
+                                setCellSafe(rowIdx, 9, todayDate);
+                                setCellSafe(rowIdx, 10, todayDate);
+                                setCellSafe(rowIdx, 14, itemID);
+                                setCellSafe(rowIdx, 15, fgName);
+                                setCellSafe(rowIdx, 18, skuQty);
+                                setCellSafe(rowIdx, 19, "Bag");
+                                setCellSafe(rowIdx, 21, 2100);
+                                setCellSafe(rowIdx, 25, routeNum);
+                                setCellSafe(rowIdx, 26, agency);
 
                                 itemID += 10;
                                 rowIdx++;
@@ -231,10 +232,10 @@
                 let safeRoute = String(routeNum).replace(/[\/\\?%*:|"<>]/g, "-");
                 let timeStamp = new Date().toTimeString().slice(0,8).replace(/:/g,"");
                 
-                XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`, { cellStyles: true, bookSST: true });
+                XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`);
                 
                 totalProcessed++;
-                logDiv.innerText += `✅ Success: ${fileName} generated with template theme.\n`;
+                logDiv.innerText += `✅ Success: ${fileName} generated successfully.\n`;
             }
 
             logDiv.innerText += `\n🎉 All Done! Total ${totalProcessed} files successfully generated.`;

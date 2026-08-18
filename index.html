@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sales Order Automation Web Tool</title>
-    <!-- SheetJS Library with Style Support -->
+    <!-- SheetJS Library -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; }
@@ -56,10 +56,8 @@
 
         logDiv.innerText = "Status: Processing started...\n";
 
-        // Read Template File as ArrayBuffer
         let templateFile = filesMap['output.xlsx'];
         let templateArrayBuffer = await templateFile.arrayBuffer();
-
         let totalProcessed = 0;
 
         for (let fileName in filesMap) {
@@ -149,7 +147,6 @@
             }
             if (totalCol === -1) totalCol = jsonInput[fgRow].length;
 
-            // 5. Open template with cell styles enabled
             let clonedBuffer = templateArrayBuffer.slice(0);
             let templateWb = XLSX.read(clonedBuffer, {type: 'array', cellStyles: true, cellFormulas: true});
             let sheetName = templateWb.SheetNames.includes("Order Data") ? "Order Data" : templateWb.SheetNames[0];
@@ -171,34 +168,34 @@
                             rowHasItems = true;
                             let fgName = jsonInput[fgRow][c];
 
-                            function setCellPreserveStyle(rIndex, cIndex, val) {
+                            function setCellData(rIndex, cIndex, val) {
                                 let cellRef = XLSX.utils.encode_cell({r: rIndex, c: cIndex});
                                 if (!templateWs[cellRef]) {
                                     templateWs[cellRef] = { t: 's', v: val };
                                 } else {
                                     templateWs[cellRef].v = val;
                                     templateWs[cellRef].t = typeof val === 'number' ? 'n' : 's';
-                                    delete templateWs[cellRef].w; // clear formatted string cache so excel recalculates
+                                    delete templateWs[cellRef].w;
                                 }
                             }
 
-                            setCellPreserveStyle(rowIdx, 1, salesOrderNum); // Col B
-                            setCellPreserveStyle(rowIdx, 2, "OR");          // Col C
-                            setCellPreserveStyle(rowIdx, 3, "SO20");        // Col D
-                            setCellPreserveStyle(rowIdx, 4, 10);            // Col E
-                            setCellPreserveStyle(rowIdx, 5, 20);            // Col F
-                            setCellPreserveStyle(rowIdx, 6, "DR" + agency); // Col G
-                            setCellPreserveStyle(rowIdx, 7, "DR" + agency); // Col H
-                            setCellPreserveStyle(rowIdx, 8, "REF-" + agency + "-" + todayDate); // Col I
-                            setCellPreserveStyle(rowIdx, 9, todayDate);     // Col J
-                            setCellPreserveStyle(rowIdx, 10, todayDate);    // Col K
-                            setCellPreserveStyle(rowIdx, 14, itemID);       // Col O
-                            setCellPreserveStyle(rowIdx, 15, fgName);       // Col P
-                            setCellPreserveStyle(rowIdx, 18, skuQty);       // Col S
-                            setCellPreserveStyle(rowIdx, 19, "Bag");        // Col T
-                            setCellPreserveStyle(rowIdx, 21, 2100);         // Col V
-                            setCellPreserveStyle(rowIdx, 25, routeNum);     // Col Z
-                            setCellPreserveStyle(rowIdx, 26, agency);       // Col AA
+                            setCellData(rowIdx, 1, salesOrderNum); // Col B
+                            setCellData(rowIdx, 2, "OR");          // Col C
+                            setCellData(rowIdx, 3, "SO20");        // Col D
+                            setCellData(rowIdx, 4, 10);            // Col E
+                            setCellData(rowIdx, 5, 20);            // Col F
+                            setCellData(rowIdx, 6, "DR" + agency); // Col G
+                            setCellData(rowIdx, 7, "DR" + agency); // Col H
+                            setCellData(rowIdx, 8, "REF-" + agency + "-" + todayDate); // Col I
+                            setCellData(rowIdx, 9, todayDate);     // Col J
+                            setCellData(rowIdx, 10, todayDate);    // Col K
+                            setCellData(rowIdx, 14, itemID);       // Col O
+                            setCellData(rowIdx, 15, fgName);       // Col P
+                            setCellData(rowIdx, 18, skuQty);       // Col S
+                            setCellData(rowIdx, 19, "Bag");        // Col T
+                            setCellData(rowIdx, 21, 2100);         // Col V
+                            setCellData(rowIdx, 25, routeNum);     // Col Z
+                            setCellData(rowIdx, 26, agency);       // Col AA
 
                             itemID += 10;
                             rowIdx++;
@@ -208,20 +205,18 @@
                 }
             }
 
-            // Update range reference
             let range = XLSX.utils.decode_range(templateWs['!ref'] || "A1:Z1");
             if (rowIdx > range.e.r) {
                 range.e.r = rowIdx;
                 templateWs['!ref'] = XLSX.utils.encode_range(range);
             }
 
-            // Write with full styling options
             let safeRoute = String(routeNum).replace(/[\/\\?%*:|"<>]/g, "-");
             let timeStamp = new Date().toTimeString().slice(0,8).replace(/:/g,"");
-            XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`, { cellStyles: true });
+            XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`, { cellStyles: true, bookSST: true });
             
             totalProcessed++;
-            logDiv.innerText += `✅ Success: ${fileName} processed with exact template styling.\n`;
+            logDiv.innerText += `✅ Success: ${fileName} processed.\n`;
         }
 
         logDiv.innerText += `\n🎉 All Done! Total ${totalProcessed} files processed & downloaded.`;

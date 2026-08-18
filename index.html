@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Order Automation Web Tool</title>
+    <!-- SheetJS Library Excel Read/Write ke liye -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; }
+        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 700px; margin: auto; }
+        h2 { color: #1a73e8; margin-top: 0; }
+        p { color: #555; }
+        .upload-box { border: 2px dashed #ccc; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0; background: #fafafa; }
+        input[type="file"] { margin: 10px 0; }
+        button { background: #1a73e8; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; transition: background 0.3s; }
+        button:hover { background: #1557b0; }
+        #log { margin-top: 20px; white-space: pre-line; background: #e8f0fe; padding: 15px; border-radius: 6px; border-left: 5px solid #1a73e8; font-family: monospace; font-size: 14px; max-height: 200px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>📊 Sales Order Automation Tool</h2>
+    <p>Apni Inbound Excel Files aur Output Template (Output.xlsx) select karein:</p>
+    
+    <div class="upload-box">
+        <label><strong>Select Files (Input files + Output.xlsx template):</strong></label><br>
+        <input type="file" id="excelFiles" accept=".xlsx, .xls" multiple />
+    </div>
+
+    <button onclick="processSalesOrders()">Process & Generate Orders</button>
+    
+    <div id="log">Status: Ready. Kripya files select karke process button dabayein.</div>
+</div>
+
+<script>
+    async function processSalesOrders() {
+        const fileInput = document.getElementById('excelFiles');
+        const logDiv = document.getElementById('log');
+
+        if (fileInput.files.length === 0) {
+            alert("Kripya pehle Excel files select karein!");
+            return;
+        }
+
+        let filesMap = {};
+        for (let i = 0; i < fileInput.files.length; i++) {
+            filesMap[fileInput.files[i].name.toLowerCase()] = fileInput.files[i];
+        }
+
+        if (!filesMap['output.xlsx']) {
+            alert("Error: Selected files mein 'Output.xlsx' template file nahi mili! Kripya template file bhi select karein.");
+            return;
+        }
+
+        logDiv.innerText = "Status: Processing started...\n";
+
+        // Read Template File
+        let templateFile = filesMap['output.xlsx'];
+        let templateData = await templateFile.arrayBuffer();
+        let templateWb = XLSX.read(templateData, {type: 'array'});
+
+        let totalProcessed = 0;
+
+        for (let fileName in filesMap) {
+            if (fileName === 'output.xlsx') continue;
+
+            logDiv.innerText += `Processing: ${fileName}...\n`;
+            let file = filesMap[fileName];
+            let data = await file.arrayBuffer();
+            let wbInput = XLSX.read(data, {type: 'array'});
+            let wsInput = wbInput.Sheets[wbInput.SheetNames[0]];
+            let jsonInput = XLSX.utils.sheet_to_json(wsInput, {header: 1});
+
+            // 1. Find FG Row & Column
+            let fgRow = -1, fgCol = -1;
+            for (let r = 0; r < jsonInput.length; r++) {
+                for (let c = 0; c < jsonInput[r].length; c++) {
+                    let val = String(jsonInput[r][c] || "").trim().toUpperCase();
+                    if (val.startsWith("FG")) {
+                        fgRow = r;
+                        fgCol = c;
+                        break;
+                    }
+                }
+                if (fgRow !== -1) break;
+            }
+
+            if (fgRow === -1) {
+                logDiv.innerText += `❌ Error in ${fileName}: 'FG' code nahi mila.\n`;
+                continue;
+            }
+
+            // 2. Route Number Finding
+            let routeNum = "22";
+            for (let r = 0; r < fgRow; r++) {
+                for (let c = 0; c < 10; c++) {
+                    let cellVal = String(jsonInput[r][c] || "").trim();
+                    let upperVal = cellVal.toUpperCase();
+                    if (cellVal !== "" && cellVal.length <= 6 && /\d/.test(cellVal) &&
+                        !["SALES PERSON", "CONTACT NO:", "RT DR", "ROUTE", "MATERIAL CODE"].includes(upperVal)) {
+                        routeNum = cellVal;
+                        break;
+                    }
+                }
+                if (routeNum !== "22") break;
+            }
+
+            // 3. Agency Column Detection
+            let agencyCol = -1;
+            for (let c = 0; c < fgCol; c++) {
+                let headerText = String(jsonInput[fgRow - 1] ? jsonInput[fgRow - 1][c] : "").toUpperCase().replace(/\s+/g, "");
+                if (headerText.includes("AG") && !headerText.includes("SALES")) {
+                    agencyCol = c;
+                    break;
+                }
+            }
+
+            if (agencyCol === -1) {
+                // Fallback numeric non-sequential search
+                for (let c = 0; c < fgCol; c++) {
+                    let hText = String(jsonInput[fgRow - 1] ? jsonInput[fgRow - 1][c] : "").toUpperCase();
+                    if (hText.includes("SR") || hText.includes("SERIAL") || hText.includes("S.NO") || hText.includes("NO")) continue;
+                    
+                    let isNum = true, count = 0;
+                    for (let r = fgRow + 1; r < jsonInput.length; r++) {
+                        let v = jsonInput[r][c];
+                        if (v !== undefined && v !== "") {
+                            if (isNaN(v)) { isNum = false; break; }
+                            count++;
+                        }
+                    }
+                    if (isNum && count > 0 && c !== 0) {
+                        agencyCol = c;
+                        break;
+                    }
+                }
+            }
+
+            if (agencyCol === -1) agencyCol = 2; // Default fallback (Column 3)
+
+            // 4. Total/Sum Column Detection
+            let totalCol = -1;
+            for (let c = fgCol; c < jsonInput[fgRow].length; c++) {
+                let hText = String(jsonInput[fgRow][c] || "").trim().toUpperCase();
+                if (hText === "TOTAL" || hText.includes("TOTAL") || hText === "SUM") {
+                    totalCol = c;
+                    break;
+                }
+            }
+            if (totalCol === -1) totalCol = jsonInput[fgRow].length;
+
+            // 5. Clone Template Workbook for Output
+            let newWb = XLSX.utils.book_new();
+            let templateWs = templateWb.Sheets["Order Data"] || templateWb.Sheets[templateWb.SheetNames[0]];
+            let outputData = XLSX.utils.sheet_to_json(templateWs, {header: 1});
+
+            let salesOrderNum = 1;
+            let rowCount = 5; // 0-indexed row 5 means Excel row 6
+
+            let todayDate = new Date().toISOString().slice(0, 10);
+
+            for (let r = fgRow + 1; r < jsonInput.length; r++) {
+                let agency = jsonInput[r][agencyCol];
+                if (agency !== undefined && agency !== "" && !isNaN(agency)) {
+                    let itemID = 10;
+                    let rowHasItems = false;
+
+                    for (let c = fgCol; c < totalCol; c++) {
+                        let skuQty = Number(jsonInput[r][c]);
+                        if (skuQty > 0) {
+                            rowHasItems = true;
+                            let fgName = jsonInput[fgRow][c];
+
+                            // Ensure row exists in outputData array
+                            while (outputData.length <= rowCount) { outputData.push([]); }
+
+                            outputData[rowCount][1] = salesOrderNum; // Col B
+                            outputData[rowCount][2] = "OR";          // Col C
+                            outputData[rowCount][3] = "SO20";        // Col D
+                            outputData[rowCount][4] = 10;            // Col E
+                            outputData[rowCount][5] = 20;            // Col F
+                            outputData[rowCount][6] = "DR" + agency; // Col G
+                            outputData[rowCount][7] = "DR" + agency; // Col H
+                            outputData[rowCount][8] = "REF-" + agency + "-" + todayDate; // Col I
+                            outputData[rowCount][9] = todayDate;     // Col J
+                            outputData[rowCount][10] = todayDate;    // Col K
+                            outputData[rowCount][14] = itemID;       // Col O
+                            outputData[rowCount][15] = fgName;       // Col P
+                            outputData[rowCount][18] = skuQty;       // Col S
+                            outputData[rowCount][19] = "Bag";        // Col T
+                            outputData[rowCount][21] = 2100;         // Col V
+                            outputData[rowCount][25] = routeNum;     // Col Z
+                            outputData[rowCount][26] = agency;       // Col AA
+
+                            itemID += 10;
+                            rowCount++;
+                        }
+                    }
+                    if (rowHasItems) salesOrderNum++;
+                }
+            }
+
+            let finalWs = XLSX.utils.aoa_to_sheet(outputData);
+            XLSX.utils.book_append_sheet(newWb, finalWs, "Order Data");
+
+            // Trigger Browser Download for each processed file
+            let safeRoute = String(routeNum).replace(/[\/\\?%*:|"<>]/g, "-");
+            let timeStamp = new Date().toTimeString().slice(0,8).replace(/:/g,"");
+            XLSX.writeFile(newWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`);
+            
+            totalProcessed++;
+            logDiv.innerText += `✅ Success: ${fileName} processed.\n`;
+        }
+
+        logDiv.innerText += `\n🎉 All Done! Total ${totalProcessed} files processed & downloaded.`;
+    }
+</script>
+
+</body>
+</html>

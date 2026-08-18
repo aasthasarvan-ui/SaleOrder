@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sales Order Automation Web Tool</title>
-    <!-- SheetJS Library -->
+    <!-- SheetJS Library with Full Styling Support -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; }
@@ -128,9 +128,9 @@
                 validCols.push(c);
             }
 
-            // 5. Open fresh copy of template keeping styling/theme 100% untouched
+            // 5. Read template with cell styles enabled
             let clonedBuffer = templateArrayBuffer.slice(0);
-            let templateWb = XLSX.read(clonedBuffer, {type: 'array', cellStyles: true, cellFormulas: true});
+            let templateWb = XLSX.read(clonedBuffer, {type: 'array', cellStyles: true, cellNF: true});
             let sheetName = templateWb.SheetNames.includes("Order Data") ? "Order Data" : templateWb.SheetNames[0];
             let templateWs = templateWb.Sheets[sheetName];
 
@@ -150,33 +150,36 @@
                             rowHasItems = true;
                             let fgName = String(jsonInput[fgRow][c]).trim();
 
-                            function setCell(rIndex, cIndex, val) {
+                            function setCellClean(rIndex, cIndex, val) {
                                 let cellRef = XLSX.utils.encode_cell({r: rIndex, c: cIndex});
                                 if (!templateWs[cellRef]) {
                                     templateWs[cellRef] = { t: typeof val === 'number' ? 'n' : 's', v: val };
                                 } else {
+                                    // Keep existing style reference if available, just update value and type
+                                    let existingStyle = templateWs[cellRef].s;
                                     templateWs[cellRef].v = val;
                                     templateWs[cellRef].t = typeof val === 'number' ? 'n' : 's';
+                                    if (existingStyle) templateWs[cellRef].s = existingStyle;
                                 }
                             }
 
-                            setCell(rowIdx, 1, salesOrderNum); // Col B
-                            setCell(rowIdx, 2, "OR");          // Col C
-                            setCell(rowIdx, 3, "SO20");        // Col D
-                            setCell(rowIdx, 4, 10);            // Col E
-                            setCell(rowIdx, 5, 20);            // Col F
-                            setCell(rowIdx, 6, "DR" + agency); // Col G
-                            setCell(rowIdx, 7, "DR" + agency); // Col H
-                            setCell(rowIdx, 8, "REF-" + agency + "-" + todayDate); // Col I
-                            setCell(rowIdx, 9, todayDate);     // Col J
-                            setCell(rowIdx, 10, todayDate);    // Col K
-                            setCell(rowIdx, 14, itemID);       // Col O
-                            setCell(rowIdx, 15, fgName);       // Col P
-                            setCell(rowIdx, 18, skuQty);       // Col S
-                            setCell(rowIdx, 19, "Bag");        // Col T
-                            setCell(rowIdx, 21, 2100);         // Col V
-                            setCell(rowIdx, 25, routeNum);     // Col Z
-                            setCell(rowIdx, 26, agency);       // Col AA
+                            setCellClean(rowIdx, 1, salesOrderNum); // Col B
+                            setCellClean(rowIdx, 2, "OR");          // Col C
+                            setCellClean(rowIdx, 3, "SO20");        // Col D
+                            setCellClean(rowIdx, 4, 10);            // Col E
+                            setCellClean(rowIdx, 5, 20);            // Col F
+                            setCellClean(rowIdx, 6, "DR" + agency); // Col G
+                            setCellClean(rowIdx, 7, "DR" + agency); // Col H
+                            setCellClean(rowIdx, 8, "REF-" + agency + "-" + todayDate); // Col I
+                            setCellClean(rowIdx, 9, todayDate);     // Col J
+                            setCellClean(rowIdx, 10, todayDate);    // Col K
+                            setCellClean(rowIdx, 14, itemID);       // Col O
+                            setCellClean(rowIdx, 15, fgName);       // Col P
+                            setCellClean(rowIdx, 18, skuQty);       // Col S
+                            setCellClean(rowIdx, 19, "Bag");        // Col T
+                            setCellClean(rowIdx, 21, 2100);         // Col V
+                            setCellClean(rowIdx, 25, routeNum);     // Col Z
+                            setCellClean(rowIdx, 26, agency);       // Col AA
 
                             itemID += 10;
                             rowIdx++;
@@ -194,10 +197,10 @@
 
             let safeRoute = String(routeNum).replace(/[\/\\?%*:|"<>]/g, "-");
             let timeStamp = new Date().toTimeString().slice(0,8).replace(/:/g,"");
-            XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`);
+            XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`, { cellStyles: true });
             
             totalProcessed++;
-            logDiv.innerText += `✅ Success: ${fileName} processed with original template theme.\n`;
+            logDiv.innerText += `✅ Success: ${fileName} processed.\n`;
         }
 
         logDiv.innerText += `\n🎉 All Done! Total ${totalProcessed} files processed & downloaded.`;

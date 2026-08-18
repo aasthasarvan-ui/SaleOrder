@@ -68,16 +68,19 @@
                 
                 let file = filesMap[fileName];
                 let data = await file.arrayBuffer();
-                let wbInput = XLSX.read(data, {type: 'array'});
+                
+                // Safe read options to prevent internal library crashes on formulas/styles
+                let wbInput = XLSX.read(data, {type: 'array', cellFormula: false, cellStyles: false});
                 let wsInput = wbInput.Sheets[wbInput.SheetNames[0]];
-                let jsonInput = XLSX.utils.sheet_to_json(wsInput, {header: 1});
+                let jsonInput = XLSX.utils.sheet_to_json(wsInput, {header: 1, defval: ""});
 
                 // 1. Find FG Row & Column Safely
                 let fgRow = -1, fgCol = -1;
                 for (let r = 0; r < jsonInput.length; r++) {
                     if (!jsonInput[r]) continue;
                     for (let c = 0; c < jsonInput[r].length; c++) {
-                        let val = String(jsonInput[r][c] || "").trim().toUpperCase();
+                        let cellVal = jsonInput[r][c];
+                        let val = (cellVal !== null && cellVal !== undefined) ? String(cellVal).trim().toUpperCase() : "";
                         if (val.startsWith("FG")) {
                             fgRow = r;
                             fgCol = c;
@@ -97,11 +100,12 @@
                 for (let r = 0; r < fgRow; r++) {
                     if (!jsonInput[r]) continue;
                     for (let c = 0; c < 10; c++) {
-                        let cellVal = String(jsonInput[r][c] || "").trim();
-                        let upperVal = cellVal.toUpperCase();
-                        if (cellVal !== "" && cellVal.length <= 6 && /\d/.test(cellVal) &&
+                        let cellVal = jsonInput[r][c];
+                        let strVal = (cellVal !== null && cellVal !== undefined) ? String(cellVal).trim() : "";
+                        let upperVal = strVal.toUpperCase();
+                        if (strVal !== "" && strVal.length <= 6 && /\d/.test(strVal) &&
                             !["SALES PERSON", "CONTACT NO:", "RT DR", "ROUTE", "MATERIAL CODE"].includes(upperVal)) {
-                            routeNum = cellVal;
+                            routeNum = strVal;
                             break;
                         }
                     }
@@ -110,9 +114,10 @@
 
                 // 3. Agency Column Detection Safely
                 let agencyCol = -1;
+                let headerRowPrev = jsonInput[fgRow - 1] || [];
                 for (let c = 0; c < fgCol; c++) {
-                    let headerRow = jsonInput[fgRow - 1] || [];
-                    let headerText = String(headerRow[c] || "").toUpperCase().replace(/\s+/g, "");
+                    let hVal = headerRowPrev[c];
+                    let headerText = (hVal !== null && hVal !== undefined) ? String(hVal).toUpperCase().replace(/\s+/g, "") : "";
                     if (headerText.includes("AG") && !headerText.includes("SALES")) {
                         agencyCol = c;
                         break;
@@ -121,15 +126,15 @@
 
                 if (agencyCol === -1) {
                     for (let c = 0; c < fgCol; c++) {
-                        let headerRow = jsonInput[fgRow - 1] || [];
-                        let hText = String(headerRow[c] || "").toUpperCase();
+                        let hVal = headerRowPrev[c];
+                        let hText = (hVal !== null && hVal !== undefined) ? String(hVal).toUpperCase() : "";
                         if (hText.includes("SR") || hText.includes("SERIAL") || hText.includes("S.NO") || hText.includes("NO")) continue;
                         
                         let isNum = true, count = 0;
                         for (let r = fgRow + 1; r < jsonInput.length; r++) {
                             if (!jsonInput[r]) continue;
                             let v = jsonInput[r][c];
-                            if (v !== undefined && v !== "") {
+                            if (v !== undefined && v !== "" && v !== null) {
                                 if (isNaN(v)) { isNum = false; break; }
                                 count++;
                             }
@@ -147,7 +152,8 @@
                 let totalCol = -1;
                 let fgHeaderRow = jsonInput[fgRow] || [];
                 for (let c = fgCol; c < fgHeaderRow.length; c++) {
-                    let hText = String(fgHeaderRow[c] || "").trim().toUpperCase();
+                    let hVal = fgHeaderRow[c];
+                    let hText = (hVal !== null && hVal !== undefined) ? String(hVal).trim().toUpperCase() : "";
                     if (hText === "TOTAL" || hText.includes("TOTAL") || hText === "SUM") {
                         totalCol = c;
                         break;
@@ -155,7 +161,7 @@
                 }
                 if (totalCol === -1) totalCol = fgHeaderRow.length;
 
-                // 5. Open template maintaining full structural theme
+                // 5. Open template maintaining full structural theme safely
                 let clonedBuffer = templateArrayBuffer.slice(0);
                 let templateWb = XLSX.read(clonedBuffer, {type: 'array', cellStyles: true, cellFormulas: true});
                 let sheetName = templateWb.SheetNames.includes("Order Data") ? "Order Data" : templateWb.SheetNames[0];
@@ -168,7 +174,7 @@
                 for (let r = fgRow + 1; r < jsonInput.length; r++) {
                     if (!jsonInput[r]) continue;
                     let agency = jsonInput[r][agencyCol];
-                    if (agency !== undefined && agency !== "" && !isNaN(agency)) {
+                    if (agency !== undefined && agency !== "" && agency !== null && !isNaN(agency)) {
                         let itemID = 10;
                         let rowHasItems = false;
 
@@ -176,7 +182,8 @@
                             let skuQty = Number(jsonInput[r][c] || 0);
                             if (skuQty > 0) {
                                 rowHasItems = true;
-                                let fgName = fgHeaderRow[c] || "";
+                                let fgNameVal = fgHeaderRow[c];
+                                let fgName = (fgNameVal !== null && fgNameVal !== undefined) ? String(fgNameVal) : "";
 
                                 function setCellExact(rIndex, cIndex, val) {
                                     let cellRef = XLSX.utils.encode_cell({r: rIndex, c: cIndex});
@@ -185,7 +192,7 @@
                                     } else {
                                         templateWs[cellRef].v = val;
                                         templateWs[cellRef].t = typeof val === 'number' ? 'n' : 's';
-                                        delete templateWs[cellRef].w;
+                                        if (templateWs[cellRef].w) delete templateWs[cellRef].w;
                                     }
                                 }
 

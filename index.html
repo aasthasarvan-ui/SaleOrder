@@ -58,7 +58,7 @@
 
         try {
             let templateFile = filesMap['output.xlsx'];
-            let templateData = await templateFile.arrayBuffer();
+            let templateArrayBuffer = await templateFile.arrayBuffer();
             let totalProcessed = 0;
 
             for (let fileName in filesMap) {
@@ -149,8 +149,9 @@
                 }
                 if (totalCol === -1) totalCol = jsonInput[fgRow].length;
 
-                // 5. Build Output Workbook using JSON data conversion to avoid freezing
-                let templateWb = XLSX.read(templateData.slice(0), {type: 'array'});
+                // 5. Open template maintaining full structural theme
+                let clonedBuffer = templateArrayBuffer.slice(0);
+                let templateWb = XLSX.read(clonedBuffer, {type: 'array', cellStyles: true, cellFormulas: true});
                 let sheetName = templateWb.SheetNames.includes("Order Data") ? "Order Data" : templateWb.SheetNames[0];
                 let templateWs = templateWb.Sheets[sheetName];
 
@@ -170,30 +171,34 @@
                                 rowHasItems = true;
                                 let fgName = jsonInput[fgRow][c];
 
-                                function setCell(rIndex, cIndex, val) {
+                                function setCellExact(rIndex, cIndex, val) {
                                     let cellRef = XLSX.utils.encode_cell({r: rIndex, c: cIndex});
-                                    templateWs[cellRef] = templateWs[cellRef] || { t: 's' };
-                                    templateWs[cellRef].v = val;
-                                    templateWs[cellRef].t = typeof val === 'number' ? 'n' : 's';
+                                    if (!templateWs[cellRef]) {
+                                        templateWs[cellRef] = { t: 's', v: val };
+                                    } else {
+                                        templateWs[cellRef].v = val;
+                                        templateWs[cellRef].t = typeof val === 'number' ? 'n' : 's';
+                                        delete templateWs[cellRef].w;
+                                    }
                                 }
 
-                                setCell(rowIdx, 1, salesOrderNum);
-                                setCell(rowIdx, 2, "OR");
-                                setCell(rowIdx, 3, "SO20");
-                                setCell(rowIdx, 4, 10);
-                                setCell(rowIdx, 5, 20);
-                                setCell(rowIdx, 6, "DR" + agency);
-                                setCell(rowIdx, 7, "DR" + agency);
-                                setCell(rowIdx, 8, "REF-" + agency + "-" + todayDate);
-                                setCell(rowIdx, 9, todayDate);
-                                setCell(rowIdx, 10, todayDate);
-                                setCell(rowIdx, 14, itemID);
-                                setCell(rowIdx, 15, fgName);
-                                setCell(rowIdx, 18, skuQty);
-                                setCell(rowIdx, 19, "Bag");
-                                setCell(rowIdx, 21, 2100);
-                                setCell(rowIdx, 25, routeNum);
-                                setCell(rowIdx, 26, agency);
+                                setCellExact(rowIdx, 1, salesOrderNum);
+                                setCellExact(rowIdx, 2, "OR");
+                                setCellExact(rowIdx, 3, "SO20");
+                                setCellExact(rowIdx, 4, 10);
+                                setCellExact(rowIdx, 5, 20);
+                                setCellExact(rowIdx, 6, "DR" + agency);
+                                setCellExact(rowIdx, 7, "DR" + agency);
+                                setCellExact(rowIdx, 8, "REF-" + agency + "-" + todayDate);
+                                setCellExact(rowIdx, 9, todayDate);
+                                setCellExact(rowIdx, 10, todayDate);
+                                setCellExact(rowIdx, 14, itemID);
+                                setCellExact(rowIdx, 15, fgName);
+                                setCellExact(rowIdx, 18, skuQty);
+                                setCellExact(rowIdx, 19, "Bag");
+                                setCellExact(rowIdx, 21, 2100);
+                                setCellExact(rowIdx, 25, routeNum);
+                                setCellExact(rowIdx, 26, agency);
 
                                 itemID += 10;
                                 rowIdx++;
@@ -212,11 +217,11 @@
                 let safeRoute = String(routeNum).replace(/[\/\\?%*:|"<>]/g, "-");
                 let timeStamp = new Date().toTimeString().slice(0,8).replace(/:/g,"");
                 
-                // Trigger download
-                XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`);
+                // Write output maintaining cell styles and theme settings
+                XLSX.writeFile(templateWb, `${safeRoute}_${todayDate}_${timeStamp}.xlsx`, { cellStyles: true, bookSST: true });
                 
                 totalProcessed++;
-                logDiv.innerText += `✅ Success: ${fileName} generated & downloaded.\n`;
+                logDiv.innerText += `✅ Success: ${fileName} generated with template theme.\n`;
             }
 
             logDiv.innerText += `\n🎉 All Done! Total ${totalProcessed} files successfully generated.`;
@@ -224,7 +229,6 @@
         } catch (err) {
             console.error(err);
             logDiv.innerText += `\n❌ Error occurred: ${err.message}`;
-            alert("Processing ke dauran error aayi hai. Console check karein.");
         }
     }
 </script>
